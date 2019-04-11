@@ -11,7 +11,7 @@ use hmac::{Hmac, Mac};
 use reqwest::Method;
 use sha2::Sha256;
 use serde::Deserialize;
-use uuid::Uuid;
+use serde::de::DeserializeOwned;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -32,55 +32,50 @@ impl V1 {
         }
     }
 
-    pub fn get_account_id(&self) -> Result<String, reqwest::Error> {
-        let mut response = self.get(Method::GET, "/api/v1/account/id")?;
-        response.text().map(|s| s.trim_matches('"').to_string())
+    pub fn get_account_id(&self) -> Result<String, Error> {
+        self.request(Method::GET, "/api/v1/account/id")
     }
 
-    pub fn get_account_balance(&self) -> Result<Vec<Balance>, reqwest::Error> {
-        let mut response = self.get(Method::GET, "/api/v1/account/balances")?;
-        response.text().map(|json| serde_json::from_str(&json).unwrap())
+    pub fn get_account_balance(&self) -> Result<Vec<Balance>, Error> {
+        self.request(Method::GET, "/api/v1/account/balances")
     }
 
-    pub fn get_orderbook(&self, pair: &str) -> Result<Orderbook, reqwest::Error> {
+    pub fn get_orderbook(&self, pair: &str) -> Result<Orderbook, Error> {
         let mut response = self.client.get(&format!("{}/api/v1/public/market/orderbook/{}", self.base_url, pair)).send()?;
-        response.text().map(|json| serde_json::from_str(&json).unwrap())
+        let json: String = response.text()?;
+        serde_json::from_str(&json)
+            .map_err(|err| Error::from(err))
     }
 
-    pub fn get_market_order(&self, id: &str) -> Result<Order, reqwest::Error> {
-        let mut response = self.get(Method::GET, &format!("/api/v1/market/orders/{}", id))?;
-        response.text().map(|json| serde_json::from_str(&json).unwrap())
+    pub fn get_market_order(&self, id: &str) -> Result<Order, Error> {
+        self.request(Method::GET, &format!("/api/v1/market/orders/{}", id))
     }
 
-    pub fn get_market_orders(&self) -> Result<Vec<Order>, reqwest::Error> {
-        let mut response = self.get(Method::GET, "/api/v1/market/orders")?;
-        response.text().map(|json| serde_json::from_str(&json).unwrap())
+    pub fn get_market_orders(&self) -> Result<Order, Error> {
+        self.request(Method::GET, "/api/v1/market/orders")
     }
 
-    pub fn new_market_order(&self, order: &MakeOrderRequest) -> Result<MakeOrderResponse, reqwest::Error> {
+    pub fn new_market_order(&self, order: &MakeOrderRequest) -> Result<MakeOrderResponse, Error> {
         let url = format!("/api/v1/market/orders?pair={}&price={}&buySell={}&volume={}&volumeCurrency={}&otherCurrency={}&submitId={}",
             order.pair, order.price, order.buy_sell, order.volume, order.volume_currency, order.other_currency, order.submit_id);
-        let mut response = self.get(Method::POST, &url)?;
-        response.text().map(|json| serde_json::from_str(&json).unwrap())
+        self.request(Method::POST, &url)
     }
 
-    pub fn close_market_order(&self, id: &str) -> Result<Order, reqwest::Error> {
-        let mut response = self.get(Method::POST, &format!("/api/v1/market/orders/close/{}", id))?;
-        response.text().map(|json| serde_json::from_str(&json).unwrap())
+    pub fn close_market_order(&self, id: &str) -> Result<Order, Error> {
+        self.request(Method::POST, &format!("/api/v1/market/orders/close/{}", id))
     }
 
-    fn get(&self, method: Method, uri: &str) -> Result<reqwest::Response, reqwest::Error> {
+    fn request<T>(&self, method: Method, uri: &str) -> Result<T, Error>
+    where T: DeserializeOwned {
         let ts = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis().to_string();
-        let msg = format!("{}{}", uri, ts);
-        let mut mac = HmacSha256::new_varkey(self.secret.as_bytes())
-            .expect("Invalid key length");
-        mac.input(msg.as_bytes());
-        let signature = to_hex_string(mac.result().code().as_slice());
-        self.client.request(method, &format!("{}{}", self.base_url, uri))
+        let mut response = self.client.request(method, &format!("{}{}", self.base_url, uri))
             .header("X-API-KEY", self.key.clone())
-            .header("X-API-NONCE", ts)
-            .header("X-API-SIGNATURE", signature)
-            .send()
+            .header("X-API-NONCE", ts.clone())
+            .header("X-API-SIGNATURE", signature(uri, &ts, &self.secret))
+            .send()?;
+        let json: String = response.text()?;
+        serde_json::from_str(&json)
+            .map_err(|err| Error::from(err))
     }
 }
 
@@ -111,7 +106,7 @@ pub struct OrderbookEntry {
     pub market_volume: String,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Order {
     #[serde(rename = "orderId")]
     pub order_id: String,
@@ -167,39 +162,51 @@ pub struct MakeOrderResponse {
     errors: Option<HashMap<String, Vec<String>>>,
 }
 
+#[derive(Debug)]
+pub enum Error {
+    SerdeErr(serde_json::Error),
+    ReqwestErr(reqwest::Error),
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(error: serde_json::Error) -> Self {
+        Error::SerdeErr(error)
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Error::ReqwestErr(error)
+    }
+}
+
+fn signature(uri: &str, ts: &str, secret: &str) -> String {
+    let msg = format!("{}{}", uri, ts);
+    let mut mac = HmacSha256::new_varkey(secret.as_bytes())
+        .expect("Invalid key length");
+    mac.input(msg.as_bytes());
+    to_hex_string(mac.result().code().as_slice())
+}
+
 fn to_hex_string(bytes: &[u8]) -> String {
     bytes.iter()
         .map(|b| format!("{:02x}", b))
         .fold(String::new(), |s1, s2| s1 + &s2)
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn get_rate() {
-        let key = "key";
-        let secret = "secret";
-        let wt = V1::new("https:/api.walutomat.pl", key, secret);
-        let ret = wt.new_market_order(&MakeOrderRequest {
-            buy_sell: "SELL",
-            pair: "EUR_PLN",
-            price: "4.0000",
-            volume: "1.00",
-            volume_currency: "PLN",
-            other_currency: "EUR",
-            submit_id: &Uuid::new_v4().to_string(),
-        });
-        let ret = wt.close_market_order("123");
-        match ret {
-            Ok(order) => println!("{}", order),
-            err => println!("{:?}", err)
-        }
-        
-        //let ret = wt.get_orderbook("EUR_PLN").unwrap();
-        //assert_eq!(ret, Orderbook {pair: "".to_string(), bids: vec![], asks: vec![] });
-        //let ret = wt.get_account_id().unwrap();
-        //let ret = wt.get_account_balance().unwrap();
+    fn signing() {
+        // compare with example at
+        // https://api.walutomat.pl/#us%C5%82ugi-wymagaj%C4%85ce-uwierzytelnienia-kluczem-wsp%C3%B3%C5%82dzielonym
+        let secret = "766j0m0hcaz0ml8erklf0ww18";
+        let uri = "/api/v1/market/orders/close/5137bdb7-acde-41ff-aeb2-0908af0bd3d9";
+        let nonce = "1517480182188";
+        let s = signature(uri, nonce, secret);
+        assert_eq!(s, "b789acef01059fbf40b787be6ce8ea414a0130106a9dd5eb57c40fd2ea4d80a");
     }
 }
