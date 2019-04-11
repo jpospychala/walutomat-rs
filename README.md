@@ -4,7 +4,7 @@ walutomat-rs is a Rust library for interacting with Walutomat API.
 extern crate walutomat;
 
 fn main() {
-  let wt = walutomat::V1::new("https://api.walutomat.pl/", "key", "secret");
+  let wt = walutomat::V1::new("https://api.walutomat.pl", "key", "secret");
   let orderbook = wt.get_orderbook("EUR_PLN").unwrap();
   
   println!("{}", orderbook.pair);
