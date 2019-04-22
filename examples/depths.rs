@@ -23,9 +23,7 @@ fn main() {
     i = (i + 1) % 20;
     let spreads = pairs.iter().map(|p| {
       let orderbook = wt.get_orderbook(&p).unwrap();
-      let ask: f64 = orderbook.asks[0].price;
-      let bid: f64 = orderbook.bids[0].price;
-      format!("{:1.4}", ask - bid)
+      format!("{}/{}", &orderbook.asks[0].base_volume, &orderbook.bids[0].base_volume)
     });
     println!(" {}", spreads.collect::<Vec<String>>().join("  "));
     thread::sleep(one_sec);

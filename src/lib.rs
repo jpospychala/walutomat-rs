@@ -11,7 +11,7 @@ use hmac::{Hmac, Mac};
 use reqwest::Method;
 use sha2::Sha256;
 use serde::Deserialize;
-use serde::de::DeserializeOwned;
+use serde::de::{Deserializer, DeserializeOwned};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -99,12 +99,21 @@ pub struct Orderbook {
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct OrderbookEntry {
-    pub price: String,
+    #[serde(deserialize_with="str_to_f64")]
+    pub price: f64,
     #[serde(rename = "baseVolume")]
     pub base_volume: String,
     #[serde(rename = "marketVolume")]
     pub market_volume: String,
 }
+
+fn str_to_f64<'de, D>(deserializer: D,) -> Result<f64, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse::<f64>().map_err(serde::de::Error::custom)
+    }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Order {
