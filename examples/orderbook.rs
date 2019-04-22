@@ -1,7 +1,7 @@
 extern crate walutomat;
 
 fn main() {
-  let wt = walutomat::V1::new("https://api.walutomat.pl", "", "");
+  let wt = walutomat::v1::API::new("https://api.walutomat.pl", "", "");
   let orderbook = wt.get_orderbook("EUR_PLN").unwrap();
   
   println!("{}", orderbook.pair);

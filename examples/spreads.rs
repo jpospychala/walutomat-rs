@@ -3,7 +3,7 @@ extern crate walutomat;
 use std::{thread, time};
 
 fn main() {
-  let wt = walutomat::V1::new("https://api.walutomat.pl", "", "");
+  let wt = walutomat::v1::API::new("https://api.walutomat.pl", "", "");
 
   let one_sec = time::Duration::from_secs(1);
 
