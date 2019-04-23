@@ -110,12 +110,12 @@ pub struct OrderbookEntry {
 }
 
 fn str_to_f64<'de, D>(deserializer: D,) -> Result<f64, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        s.parse::<f64>().map_err(serde::de::Error::custom)
-    }
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse::<f64>().map_err(serde::de::Error::custom)
+}
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Order {
