@@ -9,57 +9,69 @@ use serde::de::{Deserializer, DeserializeOwned};
 
 use super::Error;
 
-pub struct API {
+/// V2 API client
+pub struct Client {
     base_url: String,
     key: String,
     client: reqwest::Client,
 }
 
-impl API {
-    pub fn new(base_url: &str, key: &str) -> API {
-        API {
+impl Client {
+    /// Creates new client instance
+    pub fn new(base_url: &str, key: &str) -> Client {
+        Client {
             base_url: base_url.to_string(),
             key: key.to_string(),
             client: reqwest::Client::new(),
         }
     }
 
-    pub fn account_balance(&self) -> Result<ResultResponse<Vec<Balance>>, Error> {
+    /// Returns wallet balance
+    pub fn account_balance(&self) -> Result<ResultResponse<Vec<BalanceResponse>>, Error> {
         self.get("/api/v2.0.0/account/balances")
     }
 
-    pub fn direct_fx_rate(&self, pair: &str) -> Result<ResultResponse<DirectFxRate>, Error> {
+    /// Returns current exchange rate
+    pub fn direct_fx_rate(&self, pair: &str) -> Result<ResultResponse<DirectFxRateResponse>, Error> {
         self.get(&format!("/api/v2.0.0/direct_fx/rates?currency_pair={}", pair))
     }
 
-    pub fn direct_fx_exchange(&self, order: &DirectOrderRequest) -> Result<ResultResponse<DirectFxExchange>, Error> {
+    /// Requests currency exchange at rate provided by Currency One
+    pub fn direct_fx_exchange(&self, order: &DirectOrderRequest) -> Result<ResultResponse<DirectFxExchangeResponse>, Error> {
         let body = format!("dryRun={}submitId={}&currencyPair={}&buySell={}&volume={}&volumeCurrency={}&ts={}",
             order.dry_run, order.submit_id, order.currency_pair, order.buy_sell, order.volume, order.volume_currency, order.ts);
         self.post("/api/v2.0.0/direct_fx/exchanges", &body)
     }
 
-    pub fn market_fx_best_offers(&self, pair: &str) -> Result<ResultResponse<Orderbook>, Error> {
+    /// Returns 10 best bids and asks on currency pair in question
+    pub fn market_fx_best_offers(&self, pair: &str) -> Result<ResultResponse<BestOffersResponse>, Error> {
         let mut response = self.client.get(&format!("{}/api/v2.0.0/market_fx/best_offers?currencyPair={}", self.base_url, pair)).send()?;
         let json: String = response.text()?;
         serde_json::from_str(&json)
             .map_err(|err| Error::from(err))
     }
 
-    pub fn market_fx_orders(&self, order_id: Option<&str>) -> Result<ResultResponse<Order>, Error> {
+    /// Returns orders, filtered by query criteria (if any)
+    pub fn market_fx_orders(&self, order_id: Option<&str>) -> Result<ResultResponse<OrderResponse>, Error> {
         let query: String = order_id.map_or("".to_string(), |order_id| format!("?orderId={}", order_id));
         self.get(&format!("/api/v2.0.0/market_fx/orders{}", &query))
     }
 
+    /// Submits new FX order to market
+    /// 
+    /// Platform allows to submit buy or sell order with price limit. Orders shall concern one of currency pairs listed on Walutomat market.
     pub fn market_fx_order(&self, order: &MarketOrderRequest) -> Result<ResultResponse<MakeOrderResponse>, Error> {
         let body = format!("dryRun={}submitId={}&currencyPair={}&buySell={}&volume={}&volumeCurrency={}&limitPrice={}",
             order.dry_run, order.submit_id, order.currency_pair, order.buy_sell, order.volume, order.volume_currency, order.limit_price);
         self.post("/api/v2.0.0/market_fx/orders", &body)
     }
 
-    pub fn market_fx_order_close(&self, id: &str) -> Result<ResultResponse<Order>, Error> {
+    /// Withdraw order from market
+    pub fn market_fx_order_close(&self, id: &str) -> Result<ResultResponse<OrderResponse>, Error> {
         self.post("/api/v2.0.0/market_fx/orders/close", &format!("orderId={}", id))
     }
 
+    /// Requests new payout from wallet
     pub fn payout(&self, payout: &PayoutRequest) -> Result<ResultResponse<PayoutResponse>, Error> {
         unimplemented!();
     }
@@ -108,13 +120,13 @@ pub struct KeyValue {
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub struct DirectFxExchange {
+pub struct DirectFxExchangeResponse {
     #[serde(rename = "exchangeId")]
     pub exchange_id: String,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub struct DirectFxRate {
+pub struct DirectFxRateResponse {
     pub ts: String,
     #[serde(rename = "currencyPair")]
     pub currency_pair: String,
@@ -125,7 +137,7 @@ pub struct DirectFxRate {
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub struct Balance {
+pub struct BalanceResponse {
     pub currency: String,
     #[serde(rename = "balanceTotal")]
     pub balance_total: String,
@@ -136,15 +148,15 @@ pub struct Balance {
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub struct Orderbook {
+pub struct BestOffersResponse {
     #[serde(rename = "currencyPair")]
     pub currency_pair: String,
-    pub bids: Vec<OrderbookEntry>,
-    pub asks: Vec<OrderbookEntry>,
+    pub bids: Vec<BestOffersEntryResponse>,
+    pub asks: Vec<BestOffersEntryResponse>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub struct OrderbookEntry {
+pub struct BestOffersEntryResponse {
     #[serde(deserialize_with="str_to_f64")]
     pub price: f64,
     #[serde(rename = "volume")]
@@ -162,7 +174,7 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub struct Order {
+pub struct OrderResponse {
     #[serde(rename = "orderId")]
     pub order_id: String,
     #[serde(rename = "submitId")]
@@ -229,7 +241,7 @@ pub struct PayoutResponse {
 
 }
 
-impl std::fmt::Display for Order {
+impl std::fmt::Display for OrderResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Order {} {} {} {}", self.order_id, self.status, self.market, self.buy_sell)
     }

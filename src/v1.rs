@@ -17,16 +17,18 @@ use super::Error;
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub struct API {
+/// V1 API client
+pub struct Client {
     base_url: String,
     key: String,
     secret: String,
     client: reqwest::Client,
 }
 
-impl API {
-    pub fn new(base_url: &str, key: &str, secret: &str) -> API {
-        API {
+impl Client {
+    /// Creates new client instance
+    pub fn new(base_url: &str, key: &str, secret: &str) -> Client {
+        Client {
             base_url: base_url.to_string(),
             key: key.to_string(),
             secret: secret.to_string(),

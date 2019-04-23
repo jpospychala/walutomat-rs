@@ -3,7 +3,7 @@ extern crate walutomat;
 use std::{thread, time};
 
 fn main() {
-  let wt = walutomat::v2::API::new("https://api.walutomat.pl", "");
+  let client = walutomat::v2::Client::new("https://api.walutomat.pl", "");
 
   let one_sec = time::Duration::from_secs(1);
 
@@ -22,7 +22,7 @@ fn main() {
     }
     i = (i + 1) % 20;
     let spreads = pairs.iter().map(|p| {
-      let orderbook = wt.market_fx_best_offers(&p).unwrap().result.unwrap();
+      let orderbook = client.market_fx_best_offers(&p).unwrap().result.unwrap();
       let ask: f64 = orderbook.asks[0].price;
       let bid: f64 = orderbook.bids[0].price;
       format!("{:1.4}", ask - bid)

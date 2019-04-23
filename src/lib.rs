@@ -1,6 +1,12 @@
-pub mod v1;
-pub mod v2;
+//! # Walutomat API
+//! 
+//! `walutomat-rs` is a client for Walutomat API.
 
+/// Walutomat API version 1
+pub mod v1;
+
+/// Walutomat API version 2
+pub mod v2;
 
 #[derive(Debug)]
 pub enum Error {
